@@ -1,0 +1,55 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Configuration Zero-Touch Terraform Studio : Rôle STS et Backend S3 Natif'
+
+Parameters:
+  ExternalId:
+    Type: String
+    Description: 'UUID unique généré par Terraform Studio pour la sécurité STS'
+
+Resources:
+  # 1. Le Rôle IAM d'accès STS
+  TerraformStudioRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: TerraformStudio-AccessRole
+      MaxSessionDuration: 7200 
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              # TON Account ID (Compte Terraform Studio)
+              AWS: "arn:aws:iam::624654857417:root" 
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                "sts:ExternalId": !Ref ExternalId
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+  # 2. Le Bucket S3 pour l'état (Locking natif inclus)
+  TerraformStateBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "tf-studio-state-${AWS::AccountId}-${AWS::Region}"
+      # Le versioning est critique pour restaurer un state corrompu
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        IgnorePublicAcls: true
+        BlockPublicPolicy: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  RoleArn:
+    Description: 'ARN du rôle STS'
+    Value: !GetAtt TerraformStudioRole.Arn
+    
+  StateBucketName:
+    Description: 'Nom du Bucket S3 pour le Backend'
+    Value: !Ref TerraformStateBucket
